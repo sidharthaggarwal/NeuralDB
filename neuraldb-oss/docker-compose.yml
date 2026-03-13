@@ -1,0 +1,68 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NeuralDB — Docker Compose
+#
+# Usage:
+#   Development:   docker compose up
+#   Production:    docker compose --profile prod up -d
+#
+# Before starting:
+#   cp .env.example .env
+#   # Edit .env — at minimum set NEURALDB_API_KEY
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  neuraldb:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: neuraldb:latest
+    container_name: neuraldb
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    volumes:
+      - neuraldb_data:/data
+    environment:
+      NEURALDB_API_KEY:    ${NEURALDB_API_KEY:?NEURALDB_API_KEY must be set in .env}
+      NEURALDB_AUTH:       ${NEURALDB_AUTH:-true}
+      NEURALDB_DATA_PATH:  /data
+      NEURALDB_VECTOR_DIM: ${NEURALDB_VECTOR_DIM:-128}
+      NEURALDB_RATE_LIMIT: ${NEURALDB_RATE_LIMIT:-true}
+      NEURALDB_RPM:        ${NEURALDB_RPM:-120}
+      CORS_ORIGINS:        ${CORS_ORIGINS:-*}
+      PORT:                8000
+      LOG_LEVEL:           ${LOG_LEVEL:-INFO}
+      WORKERS:             ${WORKERS:-2}
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    # Resource limits — tune to your hardware
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    # Optional: Traefik reverse-proxy labels (remove if not using Traefik)
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.neuraldb.rule=Host(`neuraldb.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.neuraldb.tls=true"
+      - "traefik.http.routers.neuraldb.tls.certresolver=letsencrypt"
+      - "traefik.http.services.neuraldb.loadbalancer.server.port=8000"
+
+volumes:
+  neuraldb_data:
+    driver: local
